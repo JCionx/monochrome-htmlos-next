@@ -1,10 +1,39 @@
 import { Client, Account } from 'appwrite';
 
+function normalizeAppwriteEndpoint(rawValue) {
+    if (!rawValue || typeof rawValue !== 'string') return null;
+
+    const trimmed = rawValue.trim();
+    if (!trimmed) return null;
+
+    // Only allow absolute HTTP(S) endpoints so SDK never falls back to relative /account calls.
+    if (!/^https?:\/\//i.test(trimmed)) return null;
+
+    try {
+        const url = new URL(trimmed);
+        let path = url.pathname.replace(/\/+$/, '');
+        if (!path.endsWith('/v1')) {
+            path = `${path}/v1`.replace(/\/+/g, '/');
+        }
+        url.pathname = path;
+        return url.toString().replace(/\/+$/, '');
+    } catch {
+        return null;
+    }
+}
+
+function normalizeProjectId(rawValue) {
+    if (!rawValue || typeof rawValue !== 'string') return null;
+    const trimmed = rawValue.trim();
+    return trimmed && trimmed !== 'null' && trimmed !== 'undefined' ? trimmed : null;
+}
+
 const getEndpoint = () => {
-    const local = localStorage.getItem('monochrome-appwrite-endpoint');
+    const local = normalizeAppwriteEndpoint(localStorage.getItem('monochrome-appwrite-endpoint'));
     if (local) return local;
 
-    if (window.__APPWRITE_ENDPOINT__) return window.__APPWRITE_ENDPOINT__;
+    const envEndpoint = normalizeAppwriteEndpoint(window.__APPWRITE_ENDPOINT__);
+    if (envEndpoint) return envEndpoint;
 
     const hostname = window.location.hostname;
     if (hostname.endsWith('monochrome.tf') || hostname === 'monochrome.tf') {
@@ -14,15 +43,19 @@ const getEndpoint = () => {
 };
 
 const getProject = () => {
-    const local = localStorage.getItem('monochrome-appwrite-project');
+    const local = normalizeProjectId(localStorage.getItem('monochrome-appwrite-project'));
     if (local) return local;
 
-    if (window.__APPWRITE_PROJECT_ID__) return window.__APPWRITE_PROJECT_ID__;
+    const envProject = normalizeProjectId(window.__APPWRITE_PROJECT_ID__);
+    if (envProject) return envProject;
 
     return 'auth-for-monochrome';
 };
 
-const client = new Client().setEndpoint(getEndpoint()).setProject(getProject());
+const resolvedEndpoint = getEndpoint();
+const resolvedProject = getProject();
+
+const client = new Client().setEndpoint(resolvedEndpoint).setProject(resolvedProject);
 
 const account = new Account(client);
 export { client, account as auth };

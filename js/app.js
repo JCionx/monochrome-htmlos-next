@@ -71,6 +71,13 @@ import {
     SVG_CLOSE,
     SVG_RESET,
 } from './icons.js';
+import {
+    installHtmlOsFileInputBridge,
+    getPickedFile,
+    clearPickedFile,
+    isHtmlOsEmbedded,
+    pickFileFromHtmlOs,
+} from './htmlos-file-picker.js';
 
 // Capture real iOS state before spoofing (needed for background audio)
 if (typeof window !== 'undefined') {
@@ -382,8 +389,27 @@ async function uploadCoverImage(file) {
     }
 }
 
-document.addEventListener('DOMContentLoaded', async () => {
-    await modernSettings.waitPending();
+async function bootstrapApp() {
+    try {
+    const awaitWithTimeout = async (promise, label, timeoutMs = 2500) => {
+        const timeoutValue = Symbol('timeout');
+        const result = await Promise.race([
+            promise,
+            new Promise((resolve) => setTimeout(() => resolve(timeoutValue), timeoutMs)),
+        ]);
+
+        if (result === timeoutValue) {
+            console.warn(`${label} timed out after ${timeoutMs}ms; continuing bootstrap.`);
+        }
+
+        return result;
+    };
+
+    try {
+        await awaitWithTimeout(modernSettings.waitPending(), 'modernSettings.waitPending');
+    } catch (error) {
+        console.warn('Settings initialization pending queue failed:', error);
+    }
 
     // Initialize analytics
     initAnalytics();
@@ -419,7 +445,11 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     const currentQuality = localStorage.getItem('playback-quality') || 'HI_RES_LOSSLESS';
     const player = new Player(audioPlayer, api, currentQuality);
-    await player.init();
+    try {
+        await awaitWithTimeout(player.init(), 'player.init', 3500);
+    } catch (error) {
+        console.error('Player initialization failed:', error);
+    }
     window.monochromePlayer = player;
 
     // Initialize tracker
@@ -652,7 +682,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     // checks for a saved handle and (in browser mode) requests read permission,
     // so this is a silent no-op when no folder is configured or permission is not
     // yet granted.
-    scanLocalMediaFolder();
+    scanLocalMediaFolder().catch((error) => {
+        console.warn('Local media scan failed:', error);
+    });
 
     const scrobbler = new MultiScrobbler();
     window.monochromeScrobbler = scrobbler;
@@ -691,11 +723,25 @@ document.addEventListener('DOMContentLoaded', async () => {
     sidebarSettings.restoreState();
 
     // Render pinned items
-    await ui.renderPinnedItems();
+    try {
+        await awaitWithTimeout(ui.renderPinnedItems(), 'ui.renderPinnedItems');
+    } catch (error) {
+        console.warn('Pinned items rendering failed:', error);
+    }
 
     // Load settings module and initialize
-    const { initializeSettings } = await loadSettingsModule();
-    await initializeSettings(scrobbler, player, api, ui);
+    try {
+        const settingsModule = await awaitWithTimeout(loadSettingsModule(), 'loadSettingsModule');
+        if (settingsModule?.initializeSettings) {
+            await awaitWithTimeout(
+                settingsModule.initializeSettings(scrobbler, player, api, ui),
+                'initializeSettings',
+                4500
+            );
+        }
+    } catch (error) {
+        console.error('Settings module initialization failed:', error);
+    }
 
     // Track sidebar navigation clicks
     document.querySelectorAll('.sidebar-nav a').forEach((link) => {
@@ -894,19 +940,21 @@ document.addEventListener('DOMContentLoaded', async () => {
             document.getElementById('xml-import-panel').style.display = importType === 'xml' ? 'block' : 'none';
             document.getElementById('m3u-import-panel').style.display = importType === 'm3u' ? 'block' : 'none';
 
-            // Clear all file inputs except the active one
-            document.getElementById('csv-file-input').value =
-                importType === 'csv' ? document.getElementById('csv-file-input').value : '';
-            document.getElementById('jspf-file-input').value =
-                importType === 'jspf' ? document.getElementById('jspf-file-input').value : '';
-            document.getElementById('xspf-file-input').value =
-                importType === 'xspf' ? document.getElementById('xspf-file-input').value : '';
-            document.getElementById('xml-file-input').value =
-                importType === 'xml' ? document.getElementById('xml-file-input').value : '';
-            document.getElementById('m3u-file-input').value =
-                importType === 'm3u' ? document.getElementById('m3u-file-input').value : '';
+            // Clear all file inputs except the active one.
+            if (importType !== 'csv') clearPickedFile(document.getElementById('csv-file-input'));
+            if (importType !== 'jspf') clearPickedFile(document.getElementById('jspf-file-input'));
+            if (importType !== 'xspf') clearPickedFile(document.getElementById('xspf-file-input'));
+            if (importType !== 'xml') clearPickedFile(document.getElementById('xml-file-input'));
+            if (importType !== 'm3u') clearPickedFile(document.getElementById('m3u-file-input'));
         });
     });
+
+    installHtmlOsFileInputBridge(document.getElementById('csv-file-input'), ['csv', 'txt']);
+    installHtmlOsFileInputBridge(document.getElementById('jspf-file-input'), ['jspf', 'json']);
+    installHtmlOsFileInputBridge(document.getElementById('xspf-file-input'), ['xspf', 'xml']);
+    installHtmlOsFileInputBridge(document.getElementById('xml-file-input'), ['xml']);
+    installHtmlOsFileInputBridge(document.getElementById('m3u-file-input'), ['m3u', 'm3u8', 'txt']);
+
     const spotifyBtn = document.getElementById('csv-spotify-btn');
     const appleBtn = document.getElementById('csv-apple-btn');
     const ytmBtn = document.getElementById('csv-ytm-btn');
@@ -984,13 +1032,26 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     let useUrlInput = false;
 
-    coverUploadBtn?.addEventListener('click', () => {
+    installHtmlOsFileInputBridge(coverFileInput, ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp']);
+
+    coverUploadBtn?.addEventListener('click', async () => {
         if (useUrlInput) return;
+
+        if (isHtmlOsEmbedded()) {
+            const picked = await pickFileFromHtmlOs(['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp']);
+            if (picked && coverFileInput) {
+                coverFileInput.__htmlosSelectedFile = picked;
+                coverFileInput.dataset.selectedFileName = picked.name;
+                coverFileInput.dispatchEvent(new Event('change', { bubbles: true }));
+            }
+            return;
+        }
+
         coverFileInput?.click();
     });
 
     coverFileInput?.addEventListener('change', async (e) => {
-        const file = e.target.files?.[0];
+        const file = getPickedFile(e.target);
         if (!file) return;
 
         // Validate file type
@@ -1019,6 +1080,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             console.error('Upload failed:', error);
         } finally {
             coverUploadBtn.disabled = false;
+            clearPickedFile(coverFileInput);
         }
     });
 
@@ -1327,17 +1389,17 @@ document.addEventListener('DOMContentLoaded', async () => {
             document.getElementById('playlist-modal-title').textContent = 'Create Playlist';
             document.getElementById('playlist-name-input').value = '';
             document.getElementById('playlist-cover-input').value = '';
-            document.getElementById('playlist-cover-file-input').value = '';
+            clearPickedFile(document.getElementById('playlist-cover-file-input'));
             document.getElementById('playlist-description-input').value = '';
             modal.dataset.editingId = '';
             document.getElementById('import-section').style.display = 'block';
-            document.getElementById('csv-file-input').value = '';
+            clearPickedFile(document.getElementById('csv-file-input'));
             document.getElementById('ytm-url-input').value = '';
             document.getElementById('ytm-status').textContent = '';
-            document.getElementById('jspf-file-input').value = '';
-            document.getElementById('xspf-file-input').value = '';
-            document.getElementById('xml-file-input').value = '';
-            document.getElementById('m3u-file-input').value = '';
+            clearPickedFile(document.getElementById('jspf-file-input'));
+            clearPickedFile(document.getElementById('xspf-file-input'));
+            clearPickedFile(document.getElementById('xml-file-input'));
+            clearPickedFile(document.getElementById('m3u-file-input'));
 
             // Reset import tabs to CSV
             document.querySelectorAll('.import-tab').forEach((tab) => {
@@ -1587,10 +1649,10 @@ document.addEventListener('DOMContentLoaded', async () => {
                                 progressElement.style.display = 'none';
                             }, 1000);
                         }
-                    } else if (jspfFileInput.files.length > 0) {
+                    } else if (getPickedFile(jspfFileInput)) {
                         // Import from JSPF
                         importSource = 'jspf_import';
-                        const file = jspfFileInput.files[0];
+                        const file = getPickedFile(jspfFileInput);
                         const {
                             progressElement,
                             progressFill,
@@ -1672,8 +1734,8 @@ document.addEventListener('DOMContentLoaded', async () => {
                                 progressElement.style.display = 'none';
                             }, 1000);
                         }
-                    } else if (csvFileInput.files.length > 0) {
-                        const file = csvFileInput.files[0];
+                    } else if (getPickedFile(csvFileInput)) {
+                        const file = getPickedFile(csvFileInput);
                         const {
                             progressElement,
                             progressFill,
@@ -1786,10 +1848,10 @@ document.addEventListener('DOMContentLoaded', async () => {
                                 progressElement.style.display = 'none';
                             }, 1000);
                         }
-                    } else if (xspfFileInput.files.length > 0) {
+                    } else if (getPickedFile(xspfFileInput)) {
                         // Import from XSPF
                         importSource = 'xspf_import';
-                        const file = xspfFileInput.files[0];
+                        const file = getPickedFile(xspfFileInput);
                         const {
                             progressElement,
                             progressFill,
@@ -1845,10 +1907,10 @@ document.addEventListener('DOMContentLoaded', async () => {
                                 progressElement.style.display = 'none';
                             }, 1000);
                         }
-                    } else if (xmlFileInput.files.length > 0) {
+                    } else if (getPickedFile(xmlFileInput)) {
                         // Import from XML
                         importSource = 'xml_import';
-                        const file = xmlFileInput.files[0];
+                        const file = getPickedFile(xmlFileInput);
                         const {
                             progressElement,
                             progressFill,
@@ -1904,10 +1966,10 @@ document.addEventListener('DOMContentLoaded', async () => {
                                 progressElement.style.display = 'none';
                             }, 1000);
                         }
-                    } else if (m3uFileInput.files.length > 0) {
+                    } else if (getPickedFile(m3uFileInput)) {
                         // Import from M3U/M3U8
                         importSource = 'm3u_import';
-                        const file = m3uFileInput.files[0];
+                        const file = getPickedFile(m3uFileInput);
                         const {
                             progressElement,
                             progressFill,
@@ -2638,7 +2700,27 @@ document.addEventListener('DOMContentLoaded', async () => {
             modalSettings.closeAllModals();
         }
 
-        await router();
+        try {
+            let routeRenderCompleted = false;
+            await Promise.race([
+                (async () => {
+                    await router();
+                    routeRenderCompleted = true;
+                })(),
+                new Promise((resolve) => {
+                    setTimeout(resolve, 4000);
+                }),
+            ]);
+
+            if (!routeRenderCompleted) {
+                console.warn('router() render timed out after 4000ms; showing Home fallback.');
+                ui.showPage('home');
+            }
+        } catch (error) {
+            // Keep navigation handlers alive even if a route render fails due to API/network errors.
+            console.error('Route render failed:', error);
+            ui.showPage('home');
+        }
         updateTabTitle(player);
     };
 
@@ -2803,14 +2885,20 @@ document.addEventListener('DOMContentLoaded', async () => {
 
             if (!user) {
                 headerAccountDropdown.innerHTML = `
-                    <button class="btn-secondary" id="header-google-auth">Connect with Google</button>
                     <button class="btn-secondary" id="header-email-auth">Connect with Email</button>
                 `;
-                document.getElementById('header-google-auth').onclick = () => authManager.signInWithGoogle();
-                document.getElementById('header-email-auth').onclick = () => {
+                const headerGoogleAuthBtn = document.getElementById('header-google-auth');
+                if (headerGoogleAuthBtn) {
+                    headerGoogleAuthBtn.onclick = () => authManager.signInWithGoogle();
+                }
+
+                const headerEmailAuthBtn = document.getElementById('header-email-auth');
+                if (headerEmailAuthBtn) {
+                    headerEmailAuthBtn.onclick = () => {
                     document.getElementById('email-auth-modal').classList.add('active');
                     headerAccountDropdown.classList.remove('active');
-                };
+                    };
+                }
             } else {
                 const data = await syncManager.getUserData();
                 const hasProfile = data && data.profile && data.profile.username;
@@ -2853,7 +2941,56 @@ document.addEventListener('DOMContentLoaded', async () => {
             headerAccountIcon.style.display = 'block';
         });
     }
-});
+    } catch (error) {
+        console.error('App bootstrap failed:', error);
+
+        // Ensure navigation still works even if part of startup throws.
+        if (!window.__monoFallbackRouterAttached) {
+            window.__monoFallbackRouterAttached = true;
+
+            const safeRoute = async () => {
+                try {
+                    const fallbackUi = window.monochromeUi;
+                    if (!fallbackUi) return;
+                    const fallbackRouter = createRouter(fallbackUi);
+                    await fallbackRouter();
+                } catch (routeError) {
+                    console.error('Fallback route render failed:', routeError);
+                }
+            };
+
+            window.addEventListener('popstate', () => {
+                void safeRoute();
+            });
+
+            document.body.addEventListener('click', (e) => {
+                const link = e.target.closest('a');
+                const hasUiRouter = !!window.monochromeUi;
+                if (
+                    link &&
+                    hasUiRouter &&
+                    link.origin === window.location.origin &&
+                    link.target !== '_blank' &&
+                    !link.hasAttribute('download')
+                ) {
+                    e.preventDefault();
+                    navigate(link.pathname);
+                }
+            });
+
+            void safeRoute();
+        }
+    }
+}
+
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => {
+        void bootstrapApp();
+    });
+} else {
+    // When app.js is imported after DOMContentLoaded, run bootstrap immediately.
+    void bootstrapApp();
+}
 
 function showUpdateNotification(updateCallback) {
     // Remove any existing update notification

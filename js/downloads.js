@@ -22,6 +22,7 @@ import {
     FolderPickerWriter,
     NeutralinoFolderWriter,
     SequentialFileWriter,
+    HtmlOSDownloadsWriter,
 } from './bulk-download-writer.ts';
 import { FfmpegProgress } from './ffmpeg.types.js';
 import { DownloadProgress, ProgressMessage, SegmentedDownloadProgress } from './progressEvents.js';
@@ -33,6 +34,16 @@ const downloadTasks = new Map();
 const bulkDownloadTasks = new Map();
 const ongoingDownloads = new Set();
 let downloadNotificationContainer = null;
+
+function isHtmlOsEmbedded() {
+    if (typeof window === 'undefined') return false;
+
+    const isEmbedded = window.parent !== window;
+    const isNeutralino =
+        window.NL_MODE || window.location.search.includes('mode=neutralino') || window.location.search.includes('nl_port=');
+
+    return isEmbedded && !isNeutralino;
+}
 
 /** Wraps a single {@link WriterEntry}-like object as an AsyncIterable for use with IBulkDownloadWriter.write(). */
 async function* singleWriterEntry(entry) {
@@ -506,6 +517,10 @@ async function bulkDownload(
  * only succeeds when the folder is already known.
  */
 async function createSingleTrackFolderWriter() {
+    if (isHtmlOsEmbedded()) {
+        return new HtmlOSDownloadsWriter('Downloads');
+    }
+
     if (!modernSettings.downloadSinglesToFolder) return null;
 
     const isNeutralino =
@@ -567,6 +582,10 @@ async function createSingleTrackFolderWriter() {
  * or null when individual sequential downloads should be used.
  */
 async function createBulkWriter(folderName) {
+    if (isHtmlOsEmbedded()) {
+        return new HtmlOSDownloadsWriter('Downloads');
+    }
+
     const isNeutralino =
         typeof window !== 'undefined' &&
         (window.NL_MODE || window.location.search.includes('mode=neutralino') || window.parent !== window);

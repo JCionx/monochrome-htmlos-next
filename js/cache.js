@@ -1,4 +1,6 @@
 //js/cache.js
+import { isHtmlOsEmbedded } from './htmlos-file-picker.js';
+
 export class APICache {
     constructor(options = {}) {
         this.memoryCache = new Map();
@@ -7,10 +9,21 @@ export class APICache {
         this.dbName = 'monochrome-cache';
         this.dbVersion = 1;
         this.db = null;
+        this.disableLocalPersistence = isHtmlOsEmbedded();
+
+        if (this.disableLocalPersistence && typeof indexedDB !== 'undefined') {
+            try {
+                indexedDB.deleteDatabase(this.dbName);
+            } catch {
+                // ignore cleanup failures
+            }
+        }
+
         this.initDB();
     }
 
     async initDB() {
+        if (this.disableLocalPersistence) return;
         if (typeof indexedDB === 'undefined') return;
 
         return new Promise((resolve, reject) => {

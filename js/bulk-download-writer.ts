@@ -44,6 +44,90 @@ export interface IBulkDownloadWriter {
 }
 
 /**
+ * Writes files through the htmlOS Files API into a target base folder
+ * (defaults to `Downloads`).
+ */
+export class HtmlOSDownloadsWriter implements IBulkDownloadWriter {
+    constructor(private readonly basePath: string = 'Downloads') {}
+
+    private async ensureDirectory(
+        createFolder: ((path: string) => Promise<void>) | undefined,
+        dirPath: string,
+        createdDirs: Set<string>
+    ): Promise<void> {
+        if (!createFolder || !dirPath) return;
+
+        const parts = dirPath.split('/').filter(Boolean);
+        let current = '';
+
+        for (const part of parts) {
+            current = current ? `${current}/${part}` : part;
+            if (createdDirs.has(current)) continue;
+            try {
+                await createFolder(current);
+            } catch {
+                // Directory may already exist; ignore.
+            }
+            createdDirs.add(current);
+        }
+    }
+
+    private toFile(input: WriterEntry['input'], filename: string, lastModified: Date): File {
+        if (input instanceof Blob) {
+            return new File([input], filename, {
+                type: input.type || 'application/octet-stream',
+                lastModified: lastModified.getTime(),
+            });
+        }
+
+        if (typeof input === 'string') {
+            return new File([input], filename, {
+                type: 'text/plain',
+                lastModified: lastModified.getTime(),
+            });
+        }
+
+        const buffer =
+            input instanceof Uint8Array
+                ? input.buffer.slice(input.byteOffset, input.byteOffset + input.byteLength)
+                : input;
+
+        return new File([buffer], filename, {
+            type: 'application/octet-stream',
+            lastModified: lastModified.getTime(),
+        });
+    }
+
+    async write(files: AsyncIterable<WriterEntry>): Promise<void> {
+        const htmlosApi = (await import('@htmlos-next/api')) as {
+            createFolder?: (path: string) => Promise<void>;
+            uploadFile?: (path: string, file: File, onProgress?: (progress: number) => void) => Promise<unknown>;
+        };
+
+        if (typeof htmlosApi.uploadFile !== 'function') {
+            throw new Error('htmlOS upload API is not available');
+        }
+
+        const createdDirs = new Set<string>();
+        await this.ensureDirectory(htmlosApi.createFolder, this.basePath, createdDirs);
+
+        for await (const file of files) {
+            const pathParts = file.name.split('/').filter(Boolean);
+            if (pathParts.length === 0) continue;
+
+            const filename = pathParts[pathParts.length - 1];
+            const relativeDir = pathParts.slice(0, -1).join('/');
+            const targetDir = relativeDir ? `${this.basePath}/${relativeDir}` : this.basePath;
+
+            await this.ensureDirectory(htmlosApi.createFolder, targetDir, createdDirs);
+
+            const uploadable = this.toFile(file.input, filename, file.lastModified);
+            await htmlosApi.uploadFile(targetDir, uploadable);
+        }
+    }
+}
+
+/**
  * Triggers individual downloads for each file entry, one after another.
  */
 export class SequentialFileWriter implements IBulkDownloadWriter {

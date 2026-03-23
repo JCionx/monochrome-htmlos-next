@@ -8,7 +8,7 @@
         <meta name="theme-color" content="#000000" />
         <meta name="mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
-        <base href="/" />
+        <base href="./" />
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
         <meta name="apple-mobile-web-app-title" content="Monochrome" />
         <meta name="description" content="A minimalist music streaming application" />
@@ -22,14 +22,14 @@
         <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
         <link rel="preconnect" href="https://unpkg.com" crossorigin />
 
-        <link rel="apple-touch-icon" href="/assets/logo.svg" />
-        <link rel="manifest" href="/manifest.json" />
-        <link rel="icon" href="/assets/logo.svg" type="image/svg+xml" />
+        <link rel="apple-touch-icon" href="./assets/logo.svg" />
+        <link rel="manifest" href="./manifest.json" />
+        <link rel="icon" href="./assets/logo.svg" type="image/svg+xml" />
         <link
             href="https://api.fonts.coollabs.io/css2?family=Inter:wght@400;500;600;700;800&display=swap"
             rel="stylesheet"
         />
-        <link rel="stylesheet" href="/styles.css" />
+        <link rel="stylesheet" href="./styles.css" />
     </head>
 
     <body>
@@ -1522,20 +1522,6 @@
         <div class="app-container">
             <aside class="sidebar">
                 <div class="sidebar-content">
-                    <div class="sidebar-logo">
-                        <a href="https://monochrome.tf/" class="sidebar-logo-link">
-                            <use svg="./images/monochrome-logo.svg" size="200" class="app-logo" />
-                            <span>Monochrome</span>
-                        </a>
-                        <button
-                            id="sidebar-toggle"
-                            class="btn-icon desktop-only"
-                            style="margin-left: auto"
-                            title="Collapse Sidebar"
-                        >
-                            <use svg="!lucide/chevron-left.svg" size="20" />
-                        </button>
-                    </div>
                     <nav class="sidebar-nav main">
                         <ul>
                             <li class="nav-item" id="sidebar-nav-home">
@@ -1562,12 +1548,6 @@
                                     <span>Unreleased</span>
                                 </a>
                             </li>
-                            <li class="nav-item" id="sidebar-nav-donate">
-                                <a id="sidebar-donate-link" href="/donate">
-                                    <use svg="!lucide/hand-heart.svg" size="24" />
-                                    <span>Donate</span>
-                                </a>
-                            </li>
                             <li class="nav-item" id="sidebar-nav-settings">
                                 <a href="/settings">
                                     <use svg="!lucide/settings.svg" size="24" />
@@ -1581,18 +1561,18 @@
                             <h4 class="pinned-items-header">Pinned</h4>
                             <ul id="pinned-items-list">
                                 <!-- Pinned should be injected here -->
-                            </ul>
+                                 </ul>
                         </nav>
                         <div class="sidebar-nav-bottom">
                             <nav class="sidebar-nav bottom">
                                 <ul>
-                                    <li class="nav-item" id="sidebar-nav-about-bottom">
+                                    <li class="nav-item" id="sidebar-nav-about-bottom" style="display: none">
                                         <a href="/about">
                                             <use svg="!lucide/info.svg" size="24" />
                                             <span>About</span>
                                         </a>
                                     </li>
-                                    <li class="nav-item" id="sidebar-nav-discordbtn">
+                                    <li class="nav-item" id="sidebar-nav-discordbtn" style="display: none">
                                         <a href="discord.html" target="_blank">
                                             <use svg="./images/discord.svg" size="64" />
                                             <span>Discord</span>
@@ -1604,15 +1584,25 @@
                                             <span>GitHub</span>
                                         </a>
                                     </li>
-                                    <li class="nav-item" id="sidebar-nav-download-bottom">
+                                    <li class="nav-item" id="sidebar-nav-download-bottom" style="display: none">
                                         <a href="/download">
                                             <use svg="!lucide/download.svg" size="24" />
                                             <span>Download</span>
                                         </a>
                                     </li>
-                                </ul>
-                            </nav>
+                            </ul>
+                        </nav>
                         </div>
+                    </div>
+                    <div class="sidebar-logo">
+                        <button
+                            id="sidebar-toggle"
+                            class="btn-icon desktop-only"
+                            style="margin-left: auto"
+                            title="Collapse Sidebar"
+                        >
+                            <use svg="!lucide/chevron-left.svg" size="20" />
+                        </button>
                     </div>
                 </div>
             </aside>
@@ -2519,89 +2509,6 @@
                     <div class="settings-tab-content active" id="settings-tab-appearance">
                         <div class="settings-list">
                             <div class="settings-group">
-                                <div class="setting-item">
-                                    <div class="info">
-                                        <span class="label">Theme</span>
-                                        <span class="description">Choose your preferred color scheme</span>
-                                    </div>
-                                </div>
-                                <div class="theme-picker" id="theme-picker">
-                                    <div class="theme-option" data-theme="system">System</div>
-                                    <div class="theme-option" data-theme="monochrome">Black</div>
-                                    <div class="theme-option" data-theme="white">White</div>
-                                    <div class="theme-option" data-theme="dark">Dark</div>
-                                    <div class="theme-option" data-theme="ocean">Ocean</div>
-                                    <div class="theme-option" data-theme="purple">Purple</div>
-                                    <div class="theme-option" data-theme="forest">Forest</div>
-                                    <div class="theme-option" data-theme="mocha">Mocha</div>
-                                    <div class="theme-option" data-theme="machiatto">Machiatto</div>
-                                    <div class="theme-option" data-theme="frappe">Frappé</div>
-                                    <div class="theme-option" data-theme="latte">Latte</div>
-                                    <div class="theme-option" data-theme="custom">Custom</div>
-                                </div>
-                                <div id="applied-community-theme-container" style="display: none; margin-top: 1rem">
-                                    <button
-                                        id="applied-community-theme-btn"
-                                        class="btn-secondary"
-                                        style="
-                                            width: 100%;
-                                            display: flex;
-                                            justify-content: space-between;
-                                            align-items: center;
-                                            padding: 1rem;
-                                        "
-                                    >
-                                        <span>Applied Community Theme</span>
-                                        <span
-                                            id="applied-theme-name"
-                                            style="color: var(--muted-foreground); font-size: 0.9rem"
-                                        ></span>
-                                    </button>
-                                    <div
-                                        id="community-theme-details-panel"
-                                        style="
-                                            display: none;
-                                            padding: 1rem;
-                                            background: var(--secondary);
-                                            border-radius: var(--radius);
-                                            margin-top: 0.5rem;
-                                            border: 1px solid var(--border);
-                                        "
-                                    >
-                                        <div
-                                            style="margin-bottom: 0.5rem; font-weight: 600"
-                                            id="ct-details-title"
-                                        ></div>
-                                        <div
-                                            style="
-                                                margin-bottom: 1rem;
-                                                font-size: 0.9rem;
-                                                color: var(--muted-foreground);
-                                            "
-                                            id="ct-details-author"
-                                        ></div>
-                                        <button id="ct-unapply-btn" class="btn-secondary danger" style="width: 100%">
-                                            Unapply Theme
-                                        </button>
-                                    </div>
-                                </div>
-                                <div class="custom-theme-editor" id="custom-theme-editor">
-                                    <h4>Custom Theme</h4>
-                                    <div class="theme-color-grid" id="theme-color-grid"></div>
-                                    <div class="theme-actions">
-                                        <button class="btn-secondary" id="apply-custom-theme">Apply Theme</button>
-                                        <button class="btn-secondary" id="reset-custom-theme">Reset</button>
-                                    </div>
-                                </div>
-                                <div class="setting-item">
-                                    <div class="info">
-                                        <span class="label">Community Themes</span>
-                                        <span class="description"
-                                            >Browse and apply themes created by the community</span
-                                        >
-                                    </div>
-                                    <button id="open-theme-store-btn" class="btn-secondary">Open Theme Store</button>
-                                </div>
                                 <div class="setting-item font-settings-container">
                                     <div class="info">
                                         <span class="label">Font</span>
@@ -3083,7 +2990,7 @@
                                             >
                                         </div>
                                         <label class="toggle-switch">
-                                            <input type="checkbox" id="sidebar-show-about-bottom-toggle" checked />
+                                            <input type="checkbox" id="sidebar-show-about-bottom-toggle" />
                                             <span class="slider"></span>
                                         </label>
                                     </div>
@@ -3095,7 +3002,7 @@
                                             >
                                         </div>
                                         <label class="toggle-switch">
-                                            <input type="checkbox" id="sidebar-show-download-bottom-toggle" checked />
+                                            <input type="checkbox" id="sidebar-show-download-bottom-toggle" />
                                             <span class="slider"></span>
                                         </label>
                                     </div>
@@ -3107,7 +3014,7 @@
                                             >
                                         </div>
                                         <label class="toggle-switch">
-                                            <input type="checkbox" id="sidebar-show-discordbtn-toggle" checked />
+                                            <input type="checkbox" id="sidebar-show-discordbtn-toggle" />
                                             <span class="slider"></span>
                                         </label>
                                     </div>
@@ -3119,7 +3026,7 @@
                                             >
                                         </div>
                                         <label class="toggle-switch">
-                                            <input type="checkbox" id="sidebar-show-githubbtn-toggle" checked />
+                                            <input type="checkbox" id="sidebar-show-githubbtn-toggle" />
                                             <span class="slider"></span>
                                         </label>
                                     </div>
@@ -4005,65 +3912,6 @@
                             <div class="settings-group">
                                 <div class="setting-item">
                                     <div class="info">
-                                        <span class="label">Bulk Download Method</span>
-                                        <span class="description"
-                                            >Choose how multiple tracks are downloaded together</span
-                                        >
-                                    </div>
-                                    <select id="bulk-download-method">
-                                        <option value="zip">ZIP Archive</option>
-                                        <option value="folder">Folder Picker</option>
-                                        <option value="local">Local Media Folder</option>
-                                        <option value="individual">Individual Files</option>
-                                    </select>
-                                </div>
-                                <div class="setting-item" id="remember-folder-setting">
-                                    <div class="info">
-                                        <span class="label">Remember Last Folder</span>
-                                        <span class="description"
-                                            >Re-use the last chosen directory for Folder Picker downloads</span
-                                        >
-                                    </div>
-                                    <label class="toggle-switch">
-                                        <input type="checkbox" id="remember-folder-toggle" />
-                                        <span class="slider"></span>
-                                    </label>
-                                </div>
-                                <div class="setting-item" id="reset-saved-folder-setting">
-                                    <div class="info">
-                                        <span class="label">Reset Saved Folder</span>
-                                        <span class="description">Clear the remembered Folder Picker directory</span>
-                                    </div>
-                                    <button id="reset-saved-folder-btn" class="btn-secondary">Reset</button>
-                                </div>
-                                <div class="setting-item" id="single-to-folder-setting">
-                                    <div class="info">
-                                        <span class="label">Single Downloads to Folder</span>
-                                        <span class="description"
-                                            >Save individual track downloads directly to the configured folder instead
-                                            of triggering a browser download</span
-                                        >
-                                    </div>
-                                    <label class="toggle-switch">
-                                        <input type="checkbox" id="single-to-folder-toggle" />
-                                        <span class="slider"></span>
-                                    </label>
-                                </div>
-                                <div class="setting-item">
-                                    <div class="info">
-                                        <span class="label">Force ZIP as Blob</span>
-                                        <span class="description"
-                                            >Download ZIP in memory instead of streaming to disk (use if ZIP streaming
-                                            causes issues)</span
-                                        >
-                                    </div>
-                                    <label class="toggle-switch">
-                                        <input type="checkbox" id="force-zip-blob-toggle" />
-                                        <span class="slider"></span>
-                                    </label>
-                                </div>
-                                <div class="setting-item">
-                                    <div class="info">
                                         <span class="label">Download Lyrics</span>
                                         <span class="description"
                                             >Include .lrc files when downloading tracks/albums</span
@@ -4530,7 +4378,6 @@
                                 flex-wrap: wrap;
                             "
                         >
-                            <button id="auth-connect-btn" class="btn-secondary">Connect with Google</button>
                             <button id="toggle-email-auth-btn" class="btn-secondary">Connect with Email</button>
                             <button id="view-my-profile-btn" class="btn-secondary" style="display: none">
                                 View My Profile
@@ -4742,6 +4589,38 @@
             </footer>
         </div>
         <script src="https://cdn.jsdelivr.net/npm/pocketbase@0.21.3/dist/pocketbase.umd.js"></script>
-        <script type="module" src="/js/app.js"></script>
+        <script type="module">
+            import { initializeInternalPersistenceBridge } from './js/internalStorageBridge.js';
+
+            const isHtmlOsEmbedded =
+                window.parent !== window &&
+                !window.NL_MODE &&
+                !window.location.search.includes('mode=neutralino') &&
+                !window.location.search.includes('nl_port=');
+
+            if (isHtmlOsEmbedded) {
+                try {
+                    if ('caches' in window) {
+                        const cacheNames = await caches.keys();
+                        await Promise.all(cacheNames.map((name) => caches.delete(name)));
+                    }
+
+                    if ('indexedDB' in window) {
+                        indexedDB.deleteDatabase('MonochromeDB');
+                        indexedDB.deleteDatabase('monochrome-cache');
+                    }
+                } catch (error) {
+                    console.warn('Failed to purge local browser persistence stores:', error);
+                }
+            }
+
+            try {
+                await initializeInternalPersistenceBridge();
+            } catch (error) {
+                console.warn('Internal storage bridge initialization failed, continuing with default storage.', error);
+            }
+
+            await import('./js/app.js');
+        </script>
     </body>
 </html>

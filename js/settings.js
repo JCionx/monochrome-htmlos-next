@@ -41,6 +41,13 @@ import { authManager } from './accounts/auth.js';
 import { syncManager } from './accounts/pocketbase.js';
 import { containerFormats, customFormats } from './ffmpegFormats.ts';
 import { modernSettings } from './ModernSettings.js';
+import {
+    isHtmlOsEmbedded,
+    pickFileFromHtmlOs,
+    installHtmlOsFileInputBridge,
+    getPickedFile,
+    clearPickedFile,
+} from './htmlos-file-picker.js';
 
 async function getButterchurnPresets(...args) {
     const butterchurnModule = await import('./visualizers/butterchurn.js');
@@ -57,6 +64,41 @@ export async function initializeSettings(scrobbler, player, api, ui) {
         settingsTab.classList.add('active');
         document.getElementById(`settings-tab-${savedTab}`)?.classList.add('active');
     }
+
+    // Keep these sidebar toggles functional even if later settings sections fail.
+    const bindSidebarToggle = (id, read, write) => {
+        const toggle = document.getElementById(id);
+        if (!toggle || toggle.dataset.bound === 'true') return;
+
+        toggle.checked = !!read();
+        toggle.addEventListener('change', (e) => {
+            write(e.target.checked);
+            sidebarSectionSettings.applySidebarVisibility();
+        });
+        toggle.dataset.bound = 'true';
+    };
+
+    bindSidebarToggle(
+        'sidebar-show-about-bottom-toggle',
+        () => sidebarSectionSettings.shouldShowAbout(),
+        (enabled) => sidebarSectionSettings.setShowAbout(enabled)
+    );
+    bindSidebarToggle(
+        'sidebar-show-download-bottom-toggle',
+        () => sidebarSectionSettings.shouldShowDownload(),
+        (enabled) => sidebarSectionSettings.setShowDownload(enabled)
+    );
+    bindSidebarToggle(
+        'sidebar-show-discordbtn-toggle',
+        () => sidebarSectionSettings.shouldShowDiscord(),
+        (enabled) => sidebarSectionSettings.setShowDiscord(enabled)
+    );
+    bindSidebarToggle(
+        'sidebar-show-githubbtn-toggle',
+        () => sidebarSectionSettings.shouldShowGithub(),
+        (enabled) => sidebarSectionSettings.setShowGithub(enabled)
+    );
+    sidebarSectionSettings.applySidebarVisibility();
 
     // Initialize account system UI & Settings
     authManager.updateUI(authManager.user);
@@ -2164,12 +2206,14 @@ export async function initializeSettings(scrobbler, player, api, ui) {
     }
 
     if (eqImportBtn && eqImportFile) {
+        installHtmlOsFileInputBridge(eqImportFile, ['txt']);
+
         eqImportBtn.addEventListener('click', () => {
             eqImportFile.click();
         });
 
         eqImportFile.addEventListener('change', (e) => {
-            const file = e.target.files[0];
+            const file = getPickedFile(e.target);
             if (!file) return;
 
             const reader = new FileReader();
@@ -2201,6 +2245,8 @@ export async function initializeSettings(scrobbler, player, api, ui) {
                         eqImportBtn.textContent = 'Import';
                     }, 1500);
                 } else {
+
+            clearPickedFile(eqImportFile);
                     eqImportBtn.textContent = 'Invalid!';
                     setTimeout(() => {
                         eqImportBtn.textContent = 'Import';
@@ -3053,27 +3099,36 @@ export async function initializeSettings(scrobbler, player, api, ui) {
     });
 
     const importInput = document.getElementById('import-library-input');
-    document.getElementById('import-library-btn')?.addEventListener('click', () => {
+    installHtmlOsFileInputBridge(importInput, ['json']);
+
+    const importLibraryFromFile = async (file) => {
+        try {
+            const text = await file.text();
+            const data = JSON.parse(text);
+            await db.importData(data);
+            alert('Library imported successfully!');
+            window.location.reload(); // Simple way to refresh all state
+        } catch (err) {
+            console.error('Import failed:', err);
+            alert('Failed to import library. Please check the file format.');
+        }
+    };
+
+    document.getElementById('import-library-btn')?.addEventListener('click', async () => {
+        if (isHtmlOsEmbedded()) {
+            const file = await pickFileFromHtmlOs(['json']);
+            if (!file) return;
+            await importLibraryFromFile(file);
+            return;
+        }
         importInput.click();
     });
 
     importInput?.addEventListener('change', async (e) => {
-        const file = e.target.files[0];
+        const file = getPickedFile(e.target);
         if (!file) return;
-
-        const reader = new FileReader();
-        reader.onload = async (event) => {
-            try {
-                const data = JSON.parse(event.target.result);
-                await db.importData(data);
-                alert('Library imported successfully!');
-                window.location.reload(); // Simple way to refresh all state
-            } catch (err) {
-                console.error('Import failed:', err);
-                alert('Failed to import library. Please check the file format.');
-            }
-        };
-        reader.readAsText(file);
+        await importLibraryFromFile(file);
+        clearPickedFile(importInput);
     });
 
     // Export All Settings
@@ -3102,31 +3157,40 @@ export async function initializeSettings(scrobbler, player, api, ui) {
 
     // Import All Settings
     const settingsImportInput = document.getElementById('import-settings-input');
-    document.getElementById('import-settings-btn')?.addEventListener('click', () => {
+    installHtmlOsFileInputBridge(settingsImportInput, ['json']);
+
+    const importSettingsFromFile = async (file) => {
+        try {
+            const text = await file.text();
+            const settingsToImport = JSON.parse(text);
+            for (const [key, value] of Object.entries(settingsToImport)) {
+                if (key.startsWith('monochrome-')) {
+                    localStorage.setItem(key, typeof value === 'string' ? value : JSON.stringify(value));
+                }
+            }
+            alert('Settings imported successfully! Please reload the app.');
+            window.location.reload();
+        } catch (err) {
+            console.error('Import failed:', err);
+            alert('Failed to import settings. Please check the file format.');
+        }
+    };
+
+    document.getElementById('import-settings-btn')?.addEventListener('click', async () => {
+        if (isHtmlOsEmbedded()) {
+            const file = await pickFileFromHtmlOs(['json']);
+            if (!file) return;
+            await importSettingsFromFile(file);
+            return;
+        }
         settingsImportInput.click();
     });
 
     settingsImportInput?.addEventListener('change', async (e) => {
-        const file = e.target.files[0];
+        const file = getPickedFile(e.target);
         if (!file) return;
-
-        const reader = new FileReader();
-        reader.onload = async (event) => {
-            try {
-                const settingsToImport = JSON.parse(event.target.result);
-                for (const [key, value] of Object.entries(settingsToImport)) {
-                    if (key.startsWith('monochrome-')) {
-                        localStorage.setItem(key, typeof value === 'string' ? value : JSON.stringify(value));
-                    }
-                }
-                alert('Settings imported successfully! Please reload the app.');
-                window.location.reload();
-            } catch (err) {
-                console.error('Import failed:', err);
-                alert('Failed to import settings. Please check the file format.');
-            }
-        };
-        reader.readAsText(file);
+        await importSettingsFromFile(file);
+        clearPickedFile(settingsImportInput);
     });
 
     const customDbBtn = document.getElementById('custom-db-btn');
@@ -3412,16 +3476,18 @@ function initializeFontSettings() {
         fontSettings.loadFontFromUrl(url, name || 'CustomFont');
     });
 
+    installHtmlOsFileInputBridge(fontUploadInput, ['ttf', 'otf', 'woff', 'woff2']);
+
     // File upload
     fontUploadInput.addEventListener('change', async (e) => {
-        const file = e.target.files[0];
+        const file = getPickedFile(e.target);
         if (!file) return;
 
         try {
             const font = await fontSettings.saveUploadedFont(file);
             await fontSettings.loadUploadedFont(font.id);
             renderUploadedFontsList();
-            fontUploadInput.value = '';
+            clearPickedFile(fontUploadInput);
         } catch (err) {
             console.error('Failed to upload font:', err);
             alert('Failed to upload font');

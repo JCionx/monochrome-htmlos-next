@@ -55,6 +55,7 @@
         "@ffmpeg/core": "^0.12.10",
         "@ffmpeg/ffmpeg": "^0.12.15",
         "@ffmpeg/util": "^0.12.2",
+        "@htmlos-next/api": "^0.0.3",
         "@kawarp/core": "^1.1.1",
         "@neutralinojs/lib": "^6.5.0",
         "@svta/common-media-library": "^0.18.1",

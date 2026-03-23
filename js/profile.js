@@ -4,6 +4,7 @@ import { navigate } from './router.js';
 import { MusicAPI } from './music-api.js';
 import { apiSettings } from './storage.js';
 import { debounce, escapeHtml } from './utils.js';
+import { installHtmlOsFileInputBridge, getPickedFile, clearPickedFile } from './htmlos-file-picker.js';
 
 // objects execution february 29th 2027
 
@@ -68,6 +69,8 @@ function setupImageUploadControl(idPrefix) {
 
     if (!urlInput || !fileInput || !uploadBtn || !toggleBtn || !statusEl) return () => {};
 
+    installHtmlOsFileInputBridge(fileInput, ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp']);
+
     let useUrl = false;
 
     function updateUI() {
@@ -90,7 +93,7 @@ function setupImageUploadControl(idPrefix) {
     uploadBtn.addEventListener('click', () => fileInput.click());
 
     fileInput.addEventListener('change', async (e) => {
-        const file = e.target.files[0];
+        const file = getPickedFile(e.target);
         if (!file) return;
 
         if (!file.type.startsWith('image/')) {
@@ -116,7 +119,7 @@ function setupImageUploadControl(idPrefix) {
             statusEl.style.color = '#ef4444';
         } finally {
             uploadBtn.disabled = false;
-            fileInput.value = '';
+            clearPickedFile(fileInput);
         }
     });
 

@@ -1,12 +1,81 @@
+import { isHtmlOsEmbedded } from './htmlos-file-picker.js';
+
 export class MusicDatabase {
     constructor() {
         this.dbName = 'MonochromeDB';
         this.version = 9;
         this.db = null;
+        this.disableLocalPersistence = isHtmlOsEmbedded();
+        this.memoryStores = new Map();
+        this.storeKeyPaths = {
+            favorites_tracks: 'id',
+            favorites_videos: 'id',
+            favorites_albums: 'id',
+            favorites_artists: 'id',
+            favorites_playlists: 'uuid',
+            favorites_mixes: 'id',
+            history_tracks: 'timestamp',
+            user_playlists: 'id',
+            user_folders: 'id',
+            settings: null,
+            pinned_items: 'id',
+        };
+
+        if (this.disableLocalPersistence && typeof indexedDB !== 'undefined') {
+            try {
+                indexedDB.deleteDatabase(this.dbName);
+            } catch {
+                // ignore cleanup failures
+            }
+        }
+    }
+
+    _ensureMemoryStore(storeName) {
+        if (!this.memoryStores.has(storeName)) {
+            this.memoryStores.set(storeName, new Map());
+        }
+        return this.memoryStores.get(storeName);
+    }
+
+    _clone(value) {
+        if (value == null) return value;
+        return JSON.parse(JSON.stringify(value));
+    }
+
+    _memoryStoreFacade(storeName) {
+        const map = this._ensureMemoryStore(storeName);
+        const keyPath = this.storeKeyPaths[storeName] ?? 'id';
+
+        return {
+            get: (key) => ({ result: this._clone(map.get(key)) ?? null }),
+            getAll: () => ({ result: Array.from(map.values()).map((item) => this._clone(item)) }),
+            put: (value, keyOverride) => {
+                const valueCopy = this._clone(value);
+                let key = keyOverride;
+                if (key == null && keyPath) key = valueCopy?.[keyPath];
+                if (key == null) key = crypto.randomUUID();
+                if (keyPath && valueCopy && keyOverride != null) valueCopy[keyPath] = keyOverride;
+                map.set(key, valueCopy);
+                return { result: key };
+            },
+            delete: (key) => {
+                map.delete(key);
+                return { result: undefined };
+            },
+            clear: () => {
+                map.clear();
+                return { result: undefined };
+            },
+            count: () => ({ result: map.size }),
+        };
     }
 
     async open() {
         if (this.db) return this.db;
+
+        if (this.disableLocalPersistence || typeof indexedDB === 'undefined') {
+            return null;
+        }
 
         return new Promise((resolve, reject) => {
             const request = indexedDB.open(this.dbName, this.version);
@@ -74,6 +143,11 @@ export class MusicDatabase {
 
     // Generic Helper
     async performTransaction(storeName, mode, callback) {
+        if (this.disableLocalPersistence) {
+            const request = callback(this._memoryStoreFacade(storeName));
+            return request?.result;
+        }
+
         const db = await this.open();
         return new Promise((resolve, reject) => {
             const transaction = db.transaction(storeName, mode);
@@ -99,6 +173,21 @@ export class MusicDatabase {
         const minified = this._minifyItem(track.type || 'track', track);
         const timestamp = Date.now();
         const entry = { ...minified, timestamp };
+
+        if (this.disableLocalPersistence) {
+            const store = this._ensureMemoryStore(storeName);
+            let lastEntry = null;
+            for (const value of store.values()) {
+                if (!lastEntry || value.timestamp > lastEntry.timestamp) {
+                    lastEntry = value;
+                }
+            }
+            if (lastEntry?.id === track.id) {
+                store.delete(lastEntry.timestamp);
+            }
+            store.set(timestamp, entry);
+            return entry;
+        }
 
         const db = await this.open();
 
@@ -135,6 +224,13 @@ export class MusicDatabase {
 
     async getHistory() {
         const storeName = 'history_tracks';
+
+        if (this.disableLocalPersistence) {
+            return Array.from(this._ensureMemoryStore(storeName).values())
+                .map((item) => this._clone(item))
+                .sort((a, b) => b.timestamp - a.timestamp);
+        }
+
         const db = await this.open();
         return new Promise((resolve, reject) => {
             const transaction = db.transaction(storeName, 'readonly');
@@ -152,6 +248,12 @@ export class MusicDatabase {
 
     async clearHistory() {
         const storeName = 'history_tracks';
+
+        if (this.disableLocalPersistence) {
+            this._ensureMemoryStore(storeName).clear();
+            return;
+        }
+
         const db = await this.open();
         return new Promise((resolve, reject) => {
             const transaction = db.transaction(storeName, 'readwrite');
@@ -197,6 +299,17 @@ export class MusicDatabase {
     async getFavorites(type) {
         const plural = type === 'mix' ? 'mixes' : `${type}s`;
         const storeName = `favorites_${plural}`;
+
+        if (this.disableLocalPersistence) {
+            const results = Array.from(this._ensureMemoryStore(storeName).values()).map((item) => this._clone(item));
+            results.sort((a, b) => {
+                const aTime = a.addedAt || 0;
+                const bTime = b.addedAt || 0;
+                return bTime - aTime;
+            });
+            return results;
+        }
+
         const db = await this.open();
         return new Promise((resolve, reject) => {
             const transaction = db.transaction(storeName, 'readonly');
@@ -433,6 +546,47 @@ export class MusicDatabase {
     }
 
     async importData(data, clear = false) {
+        if (this.disableLocalPersistence) {
+            const importStore = async (storeName, items) => {
+                if (items === undefined) return false;
+
+                const store = this._ensureMemoryStore(storeName);
+                const keyPath = this.storeKeyPaths[storeName] ?? 'id';
+                const itemsArray = Array.isArray(items) ? items : Object.values(items || {});
+
+                if (clear || itemsArray.length > 0) {
+                    store.clear();
+                }
+
+                for (const raw of itemsArray) {
+                    const item = this._clone(raw);
+                    let key = keyPath ? item?.[keyPath] : undefined;
+                    if (key == null) {
+                        if (keyPath === 'uuid') key = crypto.randomUUID();
+                        else if (keyPath === 'timestamp') key = Date.now() + Math.random();
+                        else key = item?.id ?? Date.now() + Math.random();
+                        if (keyPath) item[keyPath] = key;
+                    }
+                    store.set(key, item);
+                }
+
+                return itemsArray.length > 0;
+            };
+
+            const results = await Promise.all([
+                importStore('favorites_tracks', data.favorites_tracks),
+                importStore('favorites_albums', data.favorites_albums),
+                importStore('favorites_artists', data.favorites_artists),
+                importStore('favorites_playlists', data.favorites_playlists),
+                importStore('favorites_mixes', data.favorites_mixes),
+                importStore('history_tracks', data.history_tracks),
+                data.user_playlists ? importStore('user_playlists', data.user_playlists) : Promise.resolve(false),
+                data.user_folders ? importStore('user_folders', data.user_folders) : Promise.resolve(false),
+            ]);
+
+            return results.some((r) => r);
+        }
+
         const db = await this.open();
 
         const importStore = async (storeName, items) => {
@@ -703,6 +857,12 @@ export class MusicDatabase {
     }
 
     async getFolders() {
+        if (this.disableLocalPersistence) {
+            return Array.from(this._ensureMemoryStore('user_folders').values())
+                .map((item) => this._clone(item))
+                .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+        }
+
         const db = await this.open();
         return new Promise((resolve, reject) => {
             const transaction = db.transaction('user_folders', 'readonly');
@@ -724,6 +884,13 @@ export class MusicDatabase {
 
     async getPinned() {
         const storeName = 'pinned_items';
+
+        if (this.disableLocalPersistence) {
+            return Array.from(this._ensureMemoryStore(storeName).values())
+                .map((item) => this._clone(item))
+                .sort((a, b) => (b.pinnedAt || 0) - (a.pinnedAt || 0));
+        }
+
         const db = await this.open();
         return new Promise((resolve, reject) => {
             const transaction = db.transaction(storeName, 'readonly');
@@ -740,6 +907,30 @@ export class MusicDatabase {
     }
 
     async getPlaylists(includeTracks = false) {
+        if (this.disableLocalPersistence) {
+            const store = this._ensureMemoryStore('user_playlists');
+            const playlists = Array.from(store.values())
+                .map((item) => this._clone(item))
+                .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+
+            const processedPlaylists = playlists.map((playlist) => {
+                if (typeof playlist.numberOfTracks === 'undefined') {
+                    playlist.numberOfTracks = playlist.tracks ? playlist.tracks.length : 0;
+                }
+                if (!playlist.cover && (!playlist.images || playlist.images.length === 0)) {
+                    this._updatePlaylistMetadata(playlist);
+                    store.set(playlist.id, this._clone(playlist));
+                }
+
+                if (includeTracks) return playlist;
+                // eslint-disable-next-line no-unused-vars
+                const { tracks, ...minified } = playlist;
+                return minified;
+            });
+
+            return processedPlaylists;
+        }
+
         const db = await this.open();
         return new Promise((resolve, reject) => {
             const transaction = db.transaction('user_playlists', 'readwrite'); // Changed to readwrite for lazy migration
@@ -809,6 +1000,17 @@ export class MusicDatabase {
     }
 
     async updatePlaylistTracks(playlistId, tracks) {
+        if (this.disableLocalPersistence) {
+            const store = this._ensureMemoryStore('user_playlists');
+            const playlist = this._clone(store.get(playlistId));
+            if (!playlist) throw new Error('Playlist not found');
+            playlist.tracks = tracks;
+            playlist.updatedAt = Date.now();
+            this._updatePlaylistMetadata(playlist);
+            store.set(playlistId, this._clone(playlist));
+            return playlist;
+        }
+
         const db = await this.open();
         return new Promise((resolve, reject) => {
             const transaction = db.transaction('user_playlists', 'readwrite');

@@ -320,12 +320,23 @@ export const themeManager = {
         }
     },
 
+    getSystemThemeFromUrl() {
+        try {
+            const urlTheme = new URLSearchParams(window.location.search).get('theme');
+            if (urlTheme === 'dark') return 'monochrome';
+            if (urlTheme === 'light') return 'white';
+        } catch {
+            // ignore and use fallback
+        }
+
+        return 'white';
+    },
+
     setTheme(theme) {
         localStorage.setItem(this.STORAGE_KEY, theme);
 
         if (theme === 'system') {
-            const isDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-            document.documentElement.setAttribute('data-theme', isDark ? 'monochrome' : 'white');
+            document.documentElement.setAttribute('data-theme', this.getSystemThemeFromUrl());
         } else {
             document.documentElement.setAttribute('data-theme', theme);
         }
@@ -1895,9 +1906,9 @@ export const sidebarSectionSettings = {
     shouldShowAbout() {
         try {
             const val = localStorage.getItem(this.SHOW_ABOUT_KEY);
-            return val === null ? true : val === 'true';
+            return val === null ? false : val === 'true';
         } catch {
-            return true;
+            return false;
         }
     },
 
@@ -1908,9 +1919,9 @@ export const sidebarSectionSettings = {
     shouldShowDownload() {
         try {
             const val = localStorage.getItem(this.SHOW_DOWNLOAD_KEY);
-            return val === null ? true : val === 'true';
+            return val === null ? false : val === 'true';
         } catch {
-            return true;
+            return false;
         }
     },
 
@@ -1921,9 +1932,9 @@ export const sidebarSectionSettings = {
     shouldShowDiscord() {
         try {
             const val = localStorage.getItem(this.SHOW_DISCORD_KEY);
-            return val === null ? true : val === 'true';
+            return val === null ? false : val === 'true';
         } catch {
-            return true;
+            return false;
         }
     },
 
@@ -1934,9 +1945,9 @@ export const sidebarSectionSettings = {
     shouldShowGithub() {
         try {
             const val = localStorage.getItem(this.SHOW_GITHUB_KEY);
-            return val === null ? true : val === 'true';
+            return val === null ? false : val === 'true';
         } catch {
-            return true;
+            return false;
         }
     },
 
@@ -2015,15 +2026,6 @@ export const sidebarSectionSettings = {
         });
     },
 };
-
-// System theme listener
-if (typeof window !== 'undefined' && window.matchMedia) {
-    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e) => {
-        if (themeManager.getTheme() === 'system') {
-            document.documentElement.setAttribute('data-theme', e.matches ? 'monochrome' : 'white');
-        }
-    });
-}
 
 export const fontSettings = {
     STORAGE_KEY: 'monochrome-font-config-v2',
